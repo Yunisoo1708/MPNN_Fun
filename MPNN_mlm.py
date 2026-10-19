@@ -16,6 +16,7 @@ TSV_PATH = '/mnt/c/raw_protein_structure/clusters/manifest.tsv'
 CSV_PATH = '/mnt/c/RFdiffusion/amp_regime_proteolysis_training_set_v2.csv'
 SEQ_COL = 'aa_seq'
 CACHE = 'ca_cache.pt'  # {sequence: CA coords}, so each peptide is folded only once
+MAX_LEN = 2000  # skip proteins longer than this (GPU memory)
 
 K_NN = 8        # each residue receives messages from its K nearest residues in 3D
 D = 128         # hidden size
@@ -212,8 +213,11 @@ def run_epoch(net, loader, opt=None):
 
 
 if __name__ == '__main__':
-    seqs = pd.read_csv(CSV_PATH)[SEQ_COL].tolist()
-    build_cache('/mnt/c/raw_protein_structure/clusters/structures', TSV_PATH)
+    seqs = pd.read_csv(TSV_PATH, sep='\t')['seq'].tolist()
+    cache = build_cache('/mnt/c/raw_protein_structure/clusters/structures', TSV_PATH)
+    # only chains whose real PDB structure is cached (otherwise load_coords would ESMFold-fold them), and not too long
+    seqs = [s for s in seqs if s in cache and len(s) <= MAX_LEN]
+    print(f'training on {len(seqs)} proteins (length <= {MAX_LEN})', flush=True)
     data = PeptideStructures(seqs)
     n_val = max(1, len(data) // 10)
     train_set, val_set = random_split(data, [len(data) - n_val, n_val])
